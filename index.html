@@ -229,9 +229,10 @@
         <rect x="275" y="80" width="220" height="260" rx="34" fill="none" stroke="#2e3338" stroke-width="20"/>
 
         <!-- flux -->
-        <path d="M310 110 H460 Q470 110 470 125 V295 Q470 310 455 310 H315 Q300 310 300 295 V125 Q300 110 315 110"
+        <path id="fluxPath" d="M310 110 H460 Q470 110 470 125 V295 Q470 310 455 310 H315 Q300 310 300 295 V125 Q300 110 315 110"
               fill="none" stroke="#f6c84b" stroke-width="3" stroke-dasharray="8 7"
               marker-end="url(#arrowY)" opacity=".9"/>
+        <circle id="fluxDot" r="6" fill="#f6c84b" filter="url(#softGlow)"/>
         <text x="385" y="62" text-anchor="middle" fill="#f6c84b" font-size="18" font-weight="700">Magnetic Flux Φ</text>
 
         <!-- primary source -->
@@ -270,6 +271,11 @@
         <text x="675" y="248" fill="#fff" font-size="18" id="loadText">30 Ω</text>
       </svg>
 
+      <div class="transport" style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin:14px 0 6px;">
+        <button type="button" id="playBtn" style="border:1px solid #26384a;background:#0a111a;color:#eef3f8;border-radius:10px;padding:10px 16px;font-size:15px;font-weight:700;cursor:pointer;">▶ Play AC Cycle</button>
+        <button type="button" id="resetBtn" style="border:1px solid #26384a;background:#0a111a;color:#eef3f8;border-radius:10px;padding:10px 16px;font-size:15px;font-weight:700;cursor:pointer;">↺ Reset Phase</button>
+      </div>
+      <div id="phaseText" style="text-align:center;color:#98a7b8;font-size:13px;min-height:18px;">Phase: 0°</div>
       <div class="mode" id="modeText">Step-Down Transformer</div>
       <div class="ratio" id="ratioText">Turns ratio = 0.10 : 1 (Nₛ : Nₚ)</div>
 
@@ -355,6 +361,79 @@
 
   [vp,np,ns,load].forEach(el => el.addEventListener("input", update));
   update();
+
+  const fluxPath = document.getElementById("fluxPath");
+  const fluxDot = document.getElementById("fluxDot");
+  const playBtn = document.getElementById("playBtn");
+  const resetBtn = document.getElementById("resetBtn");
+  const phaseText = document.getElementById("phaseText");
+  let playing = false, phase = 0, raf = null, last = 0;
+  const prefersReduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function setPhaseVisual(){
+    const s = Math.sin(phase * Math.PI / 180);
+    const a = Math.abs(s);
+
+    if (fluxPath) {
+      fluxPath.style.strokeDashoffset = (-(phase/360)*160).toFixed(1);
+      fluxPath.style.opacity = (0.35 + 0.65*a).toFixed(2);
+      fluxPath.setAttribute("marker-end", s >= 0 ? "url(#arrowY)" : "");
+      fluxPath.setAttribute("marker-start", s < 0 ? "url(#arrowY)" : "");
+
+      if (fluxDot) {
+        const total = fluxPath.getTotalLength();
+        const pos = ((phase % 360) / 360) * total;
+        const p = fluxPath.getPointAtLength(s >= 0 ? pos : total - pos);
+        fluxDot.setAttribute("cx", p.x);
+        fluxDot.setAttribute("cy", p.y);
+        fluxDot.style.opacity = (0.25 + 0.75*a).toFixed(2);
+      }
+    }
+
+    primaryCoil.style.opacity = (0.45 + 0.55*a).toFixed(2);
+    secondaryCoil.style.opacity = (0.45 + 0.55*a).toFixed(2);
+    phaseText.textContent = `Phase: ${Math.round(phase)}° • ${s >= 0 ? "positive half-cycle" : "negative half-cycle"}`;
+  }
+
+  function animFrame(ts){
+    if(!playing) return;
+    if(!last) last = ts;
+    const dt = Math.min(40, ts-last);
+    last = ts;
+    phase = (phase + dt*0.09) % 360;
+    setPhaseVisual();
+    raf = requestAnimationFrame(animFrame);
+  }
+
+  function startAnim(){
+    if(prefersReduced) return;
+    playing = true;
+    playBtn.textContent = "❚❚ Pause AC Cycle";
+    last = 0;
+    raf = requestAnimationFrame(animFrame);
+  }
+
+  function stopAnim(){
+    playing = false;
+    playBtn.textContent = "▶ Play AC Cycle";
+    if(raf) cancelAnimationFrame(raf);
+    raf = null;
+  }
+
+  playBtn.addEventListener("click", () => playing ? stopAnim() : startAnim());
+  resetBtn.addEventListener("click", () => {
+    stopAnim();
+    phase = 0;
+    setPhaseVisual();
+  });
+
+  if(prefersReduced){
+    playBtn.disabled = true;
+    playBtn.textContent = "Animation disabled by reduced-motion setting";
+  }
+
+  setPhaseVisual();
+
 })();
 </script>
 </body>
